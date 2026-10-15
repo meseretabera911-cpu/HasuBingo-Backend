@@ -205,3 +205,34 @@ async def run_daily_super_bingo_sequence():
     if len(room["registered_players"]) < 2: return
 
     markup = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🎟️ አሁኑኑ ትኬት ግዛ!", web_app=WebAppInfo(url=MINI_APP_URL))]])
+
+
+# 🔄 Chapa Webhook, Telegram Webhook እና የጨዋታ ዑደቶችን በአንድ ላይ ማዕከላዊ ማስነሻ
+@app.on_event("startup")
+async def on_startup():
+    global db_pool
+    # 1. የዳታቤዝ ግንኙነት መክፈቻ (ያንተ እውነተኛ External URL መጋጠሚያ)
+    db_pool = await asyncpg.create_pool(dsn="postgresql://hasu_user:r6Qy6LthQ7ssqTA71ziSzKiHgezrSaAr@://render.com")
+    
+    # 2. 🚀 የቴሌግራም ቦት ዌብሁክን (Webhook) ማስጀመር (ቦቱን Live የሚያደርገው ዋናው መፍትሔ)
+    WEBHOOK_PATH = f"/webhook/bot/{BOT_TOKEN}"
+    WEBHOOK_URL = f"https://onrender.com{WEBHOOK_PATH}"
+    await bot.set_webhook(url=WEBHOOK_URL)
+    
+    # ቦቱ ከቴሌግራም የሚመጡ መልዕክቶችን የሚቀበልበት የ FastAPI Route
+    @app.post(WEBHOOK_PATH)
+    async def bot_webhook_handler(request: Request):
+        try:
+            update = json.loads(await request.body())
+            await dp.feed_raw_update(bot, update)
+        except Exception:
+            pass
+        return {"status": "ok"}
+
+    # 3. የጨዋታ ክፍሎችን በተናጠልና በተوازي በጀርባ ማስነሳት
+    asyncio.create_task(run_standard_room_loop("PLAY_10"))
+    asyncio.create_task(run_standard_room_loop("CUSTOM_20"))
+    
+    # የሱፐር ቢንጎ ዕለታዊ መርሐግብር
+    scheduler.add_job(run_daily_super_bingo_sequence, 'cron', hour=23, minute=0)
+    scheduler.start()
